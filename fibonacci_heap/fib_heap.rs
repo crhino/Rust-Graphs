@@ -9,6 +9,7 @@
 extern crate collections;
 use std::rc::Rc;
 use std::rc::Weak;
+use std::cell::{Cell, RefCell};
 use collections::dlist::DList;
 use collections::Deque;
 
@@ -22,23 +23,23 @@ trait FibHeapEntry {
 
 impl<K,V> FibHeapEntry for FibEntry<K,V> {
     fn rank(&self) -> uint {
-        self.deref().children.len()
+        self.children.borrow().len()
     }
 }
 
 #[deriving(Clone)]
 struct FibNode<K,V> {
-    parent: Weak<FibNode<K,V>>,
-    children: DList<FibEntry<K,V>>,
+    parent: Option<Weak<FibNode<K,V>>>,
+    children: RefCell<DList<FibEntry<K,V>>>,
     // Rank is the length of children
-    marked: bool,
-    key: K,
+    marked: Cell<bool>,
+    key: RefCell<K>,
     value: V
 }
 
 impl<K: PartialOrd,V> PartialOrd for FibNode<K,V> {
     fn partial_cmp(&self, other: &FibNode<K,V>) -> Option<Ordering> {
-        self.key.partial_cmp(&other.key)
+        self.key.borrow().partial_cmp(other.key.borrow().deref())
     }
 }
 
@@ -62,9 +63,10 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
     // and delete_key.
     pub fn insert(&self, k: K, v: V) -> FibEntry<K,V> {
         let node = FibNode {
-            children: DList::new(),
-            marked: false,
-            key: k,
+            parent: None,
+            children: RefCell::new(DList::new()),
+            marked: Cell::new(false),
+            key: RefCell::new(k),
             value: v
         };
         let rc_node = Rc::new(node);
@@ -86,7 +88,7 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
     }
     pub fn find_min(&self) -> (K, V) {
         match self.roots.front() {
-            Some(n) => (n.key.clone(), n.value.clone()),
+            Some(n) => (n.key.borrow().clone(), n.value.clone()),
             None => fail!("Fibonacci heap is empty")
         }
     }
