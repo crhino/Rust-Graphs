@@ -29,7 +29,7 @@ impl<K,V> FibHeapEntry for FibEntry<K,V> {
 
 #[deriving(Clone)]
 struct FibNode<K,V> {
-    parent: Option<Weak<FibNode<K,V>>>,
+    parent: RefCell<Option<Weak<FibNode<K,V>>>>,
     children: RefCell<DList<FibEntry<K,V>>>,
     // Rank is the length of children
     marked: Cell<bool>,
@@ -61,9 +61,9 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
 
     // Must return a pointer to the specific entry for O(1) delete_node
     // and delete_key.
-    pub fn insert(&self, k: K, v: V) -> FibEntry<K,V> {
+    pub fn insert(&mut self, k: K, v: V) -> FibEntry<K,V> {
         let node = FibNode {
-            parent: None,
+            parent: RefCell::new(None),
             children: RefCell::new(DList::new()),
             marked: Cell::new(false),
             key: RefCell::new(k),
@@ -71,12 +71,12 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
         };
         let rc_node = Rc::new(node);
         let ret = rc_node.clone();
-        let new_heap = FibHeap::new();
+        let mut new_heap = FibHeap::new();
         new_heap.roots.push(rc_node);
         self.meld(new_heap);
         ret
     }
-    pub fn meld(&self, other: FibHeap<K,V>) -> FibHeap<K,V> {
+    pub fn meld<'a>(&'a mut self, other: FibHeap<K,V>) -> &'a mut FibHeap<K,V> {
         if self.roots.is_empty() {
             self.roots.append(other.roots);
         } else if self.find_min().val0() <= other.find_min().val0() {
@@ -84,7 +84,7 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
         } else {
             self.roots.prepend(other.roots);
         }
-        *self
+        self
     }
     pub fn find_min(&self) -> (K, V) {
         match self.roots.front() {
@@ -92,11 +92,25 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
             None => fail!("Fibonacci heap is empty")
         }
     }
-    pub fn delete_min(&self) -> (K, V) {
+    pub fn delete_min(&mut self) -> (K, V) {
         match self.roots.pop_front() {
             None => fail!("Fibonacci heap is empty"),
             Some(min_node) => {
+                let return_value = (min_node.key.borrow().clone(), min_node.value.clone());
 
+                // Add children of min node to root list.
+                for n in min_node.children.borrow().iter() {
+                    let mut parent = n.parent.borrow_mut();
+                    *parent.deref_mut() = None
+                }
+
+                self.roots.append(*min_node.children.borrow().deref());
+
+                // Linking Step
+
+                // Find the new minimum root
+                //
+                return_value
             }
         }
     }
