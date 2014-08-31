@@ -168,3 +168,51 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
        self.roots.push_front(min_node);
     }
 }
+
+#[cfg(test)]
+#[allow(warnings)]
+mod test {
+    use super::{FibHeap};
+    use test;
+
+    #[test]
+    fn fheap_insert() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        let one = fheap.insert(1, 1);
+        let two = fheap.insert(2, 2);
+        assert_eq!(*one.key.borrow().deref(), 1);
+        assert_eq!(*two.key.borrow().deref(), 2);
+        assert_eq!(fheap.find_min(), (1, 1));
+        let zero = fheap.insert(0, 0);
+        assert_eq!(*zero.key.borrow().deref(), 0);
+        assert_eq!(fheap.find_min(), (0, 0));
+    }
+    #[test]
+    fn fheap_meld() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        let zero = fheap.insert(1, 1);
+        let one = fheap.insert(4, 4);
+        let two = fheap.insert(2, 2);
+        let mut fheap1: FibHeap<int, int> = FibHeap::new();
+        fheap1.insert(1, 1);
+        fheap1.insert(0, 0);
+        fheap1.insert(3, 3);
+        let fheap_deref = fheap.meld(fheap1);
+        assert_eq!(fheap_deref.find_min(), (0, 0));
+    }
+    #[test]
+    fn fheap_delete_min() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        let one = fheap.insert(1, 1);
+        let two = fheap.insert(2, 2);
+        let three = fheap.insert(3, 3);
+        let four = fheap.insert(4, 4);
+        fheap.insert(5, 5);
+        assert_eq!(fheap.find_min(), (1, 1));
+        let zero = fheap.insert(0, 0);
+        assert_eq!(fheap.find_min(), (0, 0));
+        assert_eq!(fheap.delete_min(), (0, 0));
+        assert_eq!(fheap.delete_min(), (1, 1));
+        assert_eq!(fheap.delete_min(), (2, 2));
+    }
+}
