@@ -104,14 +104,67 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
                     *parent.deref_mut() = None
                 }
 
-                self.roots.append(*min_node.children.borrow().deref());
-
+                self.roots.append(min_node.children.borrow().clone());
                 // Linking Step
+                self.consolidate();
 
                 // Find the new minimum root
-                //
+                self.sort_roots();
                 return_value
             }
         }
+    }
+    fn consolidate(&mut self) {
+        if self.roots.len() < 2 {
+            return
+        }
+        loop {
+            match self.same_rank() {
+                None => break,
+                Some((n1, n2)) => {
+                    if n1 < n2 {
+                        self.link_and_insert(n1, n2);
+                    } else {
+                        self.link_and_insert(n2, n1);
+                    }
+                }
+            }
+        }
+    }
+    fn same_rank(&mut self) -> Option<(FibEntry<K,V>, FibEntry<K,V>)> {
+        let node_to_check = self.roots.pop_front().unwrap();
+        for _ in range(0, self.roots.len()) {
+            if node_to_check.rank() == self.roots.front().unwrap().rank() {
+                return Some((node_to_check, self.roots.pop_front().unwrap()));
+            }
+            self.roots.rotate_backward()
+        }
+
+        self.roots.push_front(node_to_check);
+        None
+    }
+    fn link_and_insert(&mut self, root: FibEntry<K,V>, child: FibEntry<K,V>) {
+        {
+            let mut child_parent = child.parent.borrow_mut();
+            *child_parent.deref_mut() = Some(root.clone().downgrade());
+        }
+        root.children.borrow_mut().push_front(child);
+        self.roots.push_front(root);
+    }
+    fn sort_roots(&mut self) {
+        if self.roots.len() < 1 {
+            return
+        }
+       let mut min_node = self.roots.pop_front().unwrap();
+       for _ in range(0, self.roots.len()) {
+            if *self.roots.front().unwrap() < min_node {
+                self.roots.push(min_node);
+                min_node = self.roots.pop_front().unwrap();
+                // Put the recently added node at front so that it will properly rotate backward.
+                self.roots.rotate_forward();
+            }
+            self.roots.rotate_backward()
+       }
+       self.roots.push_front(min_node);
     }
 }
