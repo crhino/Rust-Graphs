@@ -7,6 +7,8 @@
 #![crate_type = "lib"]
 
 extern crate collections;
+extern crate core;
+use core::fmt;
 use std::rc::Rc;
 use std::rc::Weak;
 use std::cell::{Cell, RefCell};
@@ -19,11 +21,24 @@ pub type FibEntry<K,V> = Rc<FibNode<K,V>>;
 // Can I do this a different way?
 trait FibHeapEntry {
     fn rank(&self) -> uint;
+    fn remove_child(&mut self, child: Self);
 }
 
-impl<K,V> FibHeapEntry for FibEntry<K,V> {
+impl<K,V: PartialEq> FibHeapEntry for FibEntry<K,V> {
     fn rank(&self) -> uint {
         self.children.borrow().len()
+    }
+    fn remove_child(&mut self, child: FibEntry<K,V>) {
+        let mut children = self.children.borrow_mut();
+        let deref = children.deref_mut();
+        for _ in range(0, deref.len()) {
+            if *deref.front().unwrap() == child {
+                deref.pop_front();
+                return
+            }
+            deref.rotate_backward();
+        }
+        fail!("Child was not found in parent.")
     }
 }
 
@@ -37,26 +52,39 @@ struct FibNode<K,V> {
     value: V
 }
 
-impl<K: PartialOrd,V> PartialOrd for FibNode<K,V> {
+impl<K: fmt::Show, V: fmt::Show> fmt::Show for FibNode<K,V> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "key: {}, value: {}\n", *self.key.borrow().deref(), self.value));
+        try!(write!(f, "***Children***\n"));
+        for n in self.children.borrow().deref().iter() {
+            try!(write!(f, "{}", n));
+        }
+        write!(f, "***Children End***\n\n")
+    }
+}
+
+impl<K: PartialOrd,V: PartialEq> PartialOrd for FibNode<K,V> {
     fn partial_cmp(&self, other: &FibNode<K,V>) -> Option<Ordering> {
         self.key.borrow().partial_cmp(other.key.borrow().deref())
     }
 }
 
-impl<K: PartialEq,V> PartialEq for FibNode<K,V> {
+impl<K,V: PartialEq> PartialEq for FibNode<K,V> {
     fn eq(&self, other: &FibNode<K,V>) -> bool {
-        self.key.eq(&other.key)
+        self.value.eq(&other.value)
     }
 }
 
+#[deriving(Show)]
 pub struct FibHeap<K,V> {
     // The minimum element is always contained at the top of the first root.
-    roots: DList<FibEntry<K,V>>
+    roots: DList<FibEntry<K,V>>,
+    total: int
 }
 
-impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
+impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
     pub fn new() -> FibHeap<K,V> {
-        FibHeap { roots: DList::new() }
+        FibHeap { roots: DList::new(), total: 0 }
     }
 
     // Must return a pointer to the specific entry for O(1) delete_node
@@ -74,6 +102,7 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
         let mut new_heap = FibHeap::new();
         new_heap.roots.push(rc_node);
         self.meld(new_heap);
+        self.total = self.total + 1;
         ret
     }
     pub fn meld<'a>(&'a mut self, other: FibHeap<K,V>) -> &'a mut FibHeap<K,V> {
@@ -110,46 +139,28 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
 
                 // Find the new minimum root
                 self.sort_roots();
+                self.total = self.total - 1;
                 return_value
             }
         }
     }
     fn consolidate(&mut self) {
-        if self.roots.len() < 2 {
-            return
-        }
+        // The maximum rank of a FibHeap is O(log n).
+        let log_n = (self.total as f64).log2() as uint + 1;
+        let mut rank_vec = Vec::from_fn(log_n, |_| -> Option<FibEntry<K,V>> { None });
         loop {
-            match self.same_rank() {
-                None => break,
-                Some((n1, n2)) => {
-                    if n1 < n2 {
-                        self.link_and_insert(n1, n2);
-                    } else {
-                        self.link_and_insert(n2, n1);
-                    }
+            match self.roots.pop_front() {
+                Some(node) => {
+                    insert_by_rank(&mut rank_vec, node);
                 }
+                None => break
             }
         }
-    }
-    fn same_rank(&mut self) -> Option<(FibEntry<K,V>, FibEntry<K,V>)> {
-        let node_to_check = self.roots.pop_front().unwrap();
-        for _ in range(0, self.roots.len()) {
-            if node_to_check.rank() == self.roots.front().unwrap().rank() {
-                return Some((node_to_check, self.roots.pop_front().unwrap()));
+        for n in rank_vec.move_iter() {
+            if n.is_some() {
+                self.roots.push(n.unwrap());
             }
-            self.roots.rotate_backward()
         }
-
-        self.roots.push_front(node_to_check);
-        None
-    }
-    fn link_and_insert(&mut self, root: FibEntry<K,V>, child: FibEntry<K,V>) {
-        {
-            let mut child_parent = child.parent.borrow_mut();
-            *child_parent.deref_mut() = Some(root.clone().downgrade());
-        }
-        root.children.borrow_mut().push_front(child);
-        self.roots.push_front(root);
     }
     fn sort_roots(&mut self) {
         if self.roots.len() < 1 {
@@ -166,6 +177,66 @@ impl<K: PartialOrd + Clone, V: Clone> FibHeap<K,V> {
             self.roots.rotate_backward()
        }
        self.roots.push_front(min_node);
+    }
+    pub fn decrease_key(&mut self, node: FibEntry<K,V>, delta: K) {
+        {
+            let mut key = node.key.borrow_mut();
+            *key.deref_mut() =*key.deref() - delta;
+        }
+        match node.parent.borrow().deref() {
+            &Some(ref weak_parent) => {
+                match weak_parent.upgrade() {
+                    Some(mut parent) => {
+                        parent.remove_child(node.clone());
+                    }
+                    None => fail!("parent node has been dropped already.")
+                }
+            }
+            &None => {
+                // Remove old node from roots so no duplicates are made.
+                for _ in range(0, self.roots.len()) {
+                    if node == *self.roots.front().unwrap() {
+                        self.roots.pop_front();
+                        break
+                    }
+                    self.roots.rotate_backward();
+                }
+            }
+        }
+        {
+            let mut parent = node.parent.borrow_mut();
+            *parent.deref_mut() = None;
+        }
+        if *self.roots.front().unwrap() <= node {
+            self.roots.push(node);
+        } else {
+            self.roots.push_front(node);
+        }
+    }
+}
+
+fn link_and_insert<K: PartialOrd,V: PartialEq>(rank_vec: &mut Vec<Option<FibEntry<K,V>>>,
+                   root: FibEntry<K,V>, child: FibEntry<K,V>) {
+    {
+        let mut child_parent = child.parent.borrow_mut();
+        *child_parent.deref_mut() = Some(root.clone().downgrade());
+    }
+    root.children.borrow_mut().push_front(child);
+    insert_by_rank(rank_vec, root);
+}
+
+fn insert_by_rank<K: PartialOrd,V: PartialEq>(rank_vec: &mut Vec<Option<FibEntry<K,V>>>, node: FibEntry<K,V>) {
+    let rank = node.rank();
+    if (*rank_vec)[rank].is_none() {
+        *rank_vec.get_mut(rank) = Some(node);
+        return
+    }
+    rank_vec.push(None);
+    let other = rank_vec.swap_remove(rank).unwrap().unwrap();
+    if node < other {
+        link_and_insert(rank_vec, node, other);
+    } else {
+        link_and_insert(rank_vec, other, node);
     }
 }
 
@@ -215,4 +286,26 @@ mod test {
         assert_eq!(fheap.delete_min(), (1, 1));
         assert_eq!(fheap.delete_min(), (2, 2));
     }
+    #[test]
+    fn test_fheap_decrease_key() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        fheap.insert(1, 1);
+        let four = fheap.insert(4, 4);
+        fheap.insert(0, 0);
+        let five = fheap.insert(5, 5);
+        println!("{}", fheap)
+        fheap.delete_min();
+        println!("{}", fheap)
+        assert_eq!(fheap.roots.len(), 2);
+        fheap.decrease_key(four.clone(), 2);
+        println!("{}", fheap)
+        assert_eq!(*four.key.borrow().deref(), 2);
+        assert!(four.parent.borrow().deref().is_none());
+        assert_eq!(fheap.roots.len(), 3);
+        fheap.decrease_key(five.clone(), 5);
+        println!("{}", fheap)
+        assert_eq!(fheap.roots.len(), 3);
+        assert_eq!(fheap.find_min(), (0, 5))
+    }
+
 }
