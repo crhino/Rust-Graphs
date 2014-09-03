@@ -127,13 +127,7 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             Some(min_node) => {
                 let return_value = (min_node.key.borrow().clone(), min_node.value.clone());
 
-                // Add children of min node to root list.
-                for n in min_node.children.borrow().iter() {
-                    let mut parent = n.parent.borrow_mut();
-                    *parent.deref_mut() = None
-                }
-
-                self.roots.append(min_node.children.borrow().clone());
+                self.add_children_to_roots(min_node);
                 // Linking Step
                 self.consolidate();
 
@@ -143,6 +137,15 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
                 return_value
             }
         }
+    }
+    fn add_children_to_roots(&mut self, node: FibEntry<K,V>) {
+        // Add children of min node to root list.
+        for n in node.children.borrow().iter() {
+            let mut parent = n.parent.borrow_mut();
+            *parent.deref_mut() = None
+        }
+
+        self.roots.append(node.children.borrow().clone());
     }
     fn consolidate(&mut self) {
         // The maximum rank of a FibHeap is O(log n).
@@ -194,13 +197,7 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             }
             &None => {
                 // Remove old node from roots so no duplicates are made.
-                for _ in range(0, self.roots.len()) {
-                    if node == *self.roots.front().unwrap() {
-                        self.roots.pop_front();
-                        break
-                    }
-                    self.roots.rotate_backward();
-                }
+                self.remove_root(node.clone())
             }
         }
         {
@@ -211,6 +208,35 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             self.roots.push(node);
         } else {
             self.roots.push_front(node);
+        }
+    }
+    pub fn delete(&mut self, node: FibEntry<K,V>) {
+        if node == *self.roots.front().unwrap() {
+            self.delete_min();
+        } else {
+            self.add_children_to_roots(node.clone());
+            match node.parent.borrow().deref() {
+                &Some(ref weak_parent) => {
+                    match weak_parent.upgrade() {
+                        Some(mut parent) => {
+                            parent.remove_child(node.clone());
+                        }
+                        None => fail!("parent node has been dropped already.")
+                    }
+                }
+                &None => {
+                    self.remove_root(node.clone())
+                }
+            }
+        }
+    }
+    fn remove_root(&mut self, node: FibEntry<K,V>) {
+        for _ in range(0, self.roots.len()) {
+            if node == *self.roots.front().unwrap() {
+                self.roots.pop_front();
+                break
+            }
+            self.roots.rotate_backward();
         }
     }
 }
@@ -293,19 +319,28 @@ mod test {
         let four = fheap.insert(4, 4);
         fheap.insert(0, 0);
         let five = fheap.insert(5, 5);
-        println!("{}", fheap)
         fheap.delete_min();
-        println!("{}", fheap)
         assert_eq!(fheap.roots.len(), 2);
         fheap.decrease_key(four.clone(), 2);
-        println!("{}", fheap)
         assert_eq!(*four.key.borrow().deref(), 2);
         assert!(four.parent.borrow().deref().is_none());
         assert_eq!(fheap.roots.len(), 3);
         fheap.decrease_key(five.clone(), 5);
-        println!("{}", fheap)
         assert_eq!(fheap.roots.len(), 3);
         assert_eq!(fheap.find_min(), (0, 5))
     }
-
+    #[test]
+    fn test_fheap_delete() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        let one = fheap.insert(1, 1);
+        fheap.insert(4, 4);
+        fheap.insert(0, 0);
+        let five = fheap.insert(5, 5);
+        fheap.delete_min();
+        fheap.delete(five);
+        assert_eq!(fheap.roots.len(), 1);
+        fheap.delete(one);
+        assert_eq!(fheap.roots.len(), 1);
+        assert_eq!(fheap.find_min(), (4, 4))
+    }
 }
