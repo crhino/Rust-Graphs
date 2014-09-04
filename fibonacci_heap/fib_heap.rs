@@ -59,7 +59,7 @@ impl<K: fmt::Show, V: fmt::Show> fmt::Show for FibNode<K,V> {
         for n in self.children.borrow().deref().iter() {
             try!(write!(f, "{}", n));
         }
-        write!(f, "***Children End***\n\n")
+        write!(f, "***Children End***\n")
     }
 }
 
@@ -189,14 +189,13 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
         match node.parent.borrow().deref() {
             &Some(ref weak_parent) => {
                 match weak_parent.upgrade() {
-                    Some(mut parent) => {
-                        parent.remove_child(node.clone());
+                    Some(parent) => {
+                        self.cascading_cut(parent, node.clone());
                     }
                     None => fail!("parent node has been dropped already.")
                 }
             }
             &None => {
-                // Remove old node from roots so no duplicates are made.
                 self.remove_root(node.clone())
             }
         }
@@ -204,11 +203,7 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             let mut parent = node.parent.borrow_mut();
             *parent.deref_mut() = None;
         }
-        if *self.roots.front().unwrap() <= node {
-            self.roots.push(node);
-        } else {
-            self.roots.push_front(node);
-        }
+        self.add_root(node);
     }
     pub fn delete(&mut self, node: FibEntry<K,V>) {
         if node == *self.roots.front().unwrap() {
@@ -218,8 +213,8 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             match node.parent.borrow().deref() {
                 &Some(ref weak_parent) => {
                     match weak_parent.upgrade() {
-                        Some(mut parent) => {
-                            parent.remove_child(node.clone());
+                        Some(parent) => {
+                            self.cascading_cut(parent, node.clone());
                         }
                         None => fail!("parent node has been dropped already.")
                     }
@@ -239,6 +234,34 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             self.roots.rotate_backward();
         }
     }
+    fn cascading_cut(&mut self, mut parent: FibEntry<K,V>, child: FibEntry<K,V>) {
+        parent.remove_child(child.clone());
+
+        match parent.parent.borrow().deref() {
+            &Some(ref weak_grandpa) => {
+                match weak_grandpa.upgrade() {
+                    Some(grandparent) => {
+                        if parent.marked.get() {
+                            self.cascading_cut(grandparent, parent.clone());
+                            self.add_root(parent.clone());
+                        } else {
+                            parent.marked.set(true);
+                        }
+                    }
+                    None => fail!("parent node has been dropped already.")
+                }
+            }
+            // parent is a root.
+            &None => return
+        }
+    }
+    fn add_root(&mut self, node: FibEntry<K,V>) {
+        if *self.roots.front().unwrap() <= node {
+            self.roots.push(node);
+        } else {
+            self.roots.push_front(node);
+        }
+    }
 }
 
 fn link_and_insert<K: PartialOrd,V: PartialEq>(rank_vec: &mut Vec<Option<FibEntry<K,V>>>,
@@ -246,6 +269,8 @@ fn link_and_insert<K: PartialOrd,V: PartialEq>(rank_vec: &mut Vec<Option<FibEntr
     {
         let mut child_parent = child.parent.borrow_mut();
         *child_parent.deref_mut() = Some(root.clone().downgrade());
+        child.marked.set(false);
+
     }
     root.children.borrow_mut().push_front(child);
     insert_by_rank(rank_vec, root);
@@ -342,5 +367,28 @@ mod test {
         fheap.delete(one);
         assert_eq!(fheap.roots.len(), 1);
         assert_eq!(fheap.find_min(), (4, 4))
+    }
+    #[test]
+    fn test_fheap_cascading_cut() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        fheap.insert(0, 0);
+        fheap.insert(1, 1);
+        fheap.insert(4, 4);
+        fheap.insert(5, 5);
+        fheap.insert(2, 2);
+        fheap.insert(3, 3);
+        let h6 = fheap.insert(6, 6);
+        let h7 = fheap.insert(7, 7);
+        fheap.insert(18, 18);
+        fheap.insert(9, 9);
+        fheap.insert(11, 11);
+        fheap.insert(15, 15);
+        fheap.delete_min();
+        assert_eq!(fheap.find_min(), (1, 1));
+        assert_eq!(fheap.roots.len(), 3);
+        fheap.decrease_key(h6, 2);
+        assert_eq!(fheap.roots.len(), 4);
+        fheap.decrease_key(h7, 3);
+        assert_eq!(fheap.roots.len(), 6);
     }
 }
