@@ -14,8 +14,11 @@ use std::rc::Weak;
 use std::cell::{Cell, RefCell};
 use collections::dlist::DList;
 use collections::Deque;
+use std::hash::Hash;
+use std::hash::sip::SipState;
+use std::collections::HashMap;
 
-pub type FibEntry<K,V> = Rc<FibNode<K,V>>;
+type FibEntry<K,V> = Rc<FibNode<K,V>>;
 
 // Have a trait so that we can implement methods on FibEntry. (error E0116])
 // Can I do this a different way?
@@ -75,21 +78,38 @@ impl<K,V: PartialEq> PartialEq for FibNode<K,V> {
     }
 }
 
-#[deriving(Show)]
+impl<K, V: Hash> Hash for FibNode<K,V> {
+    fn hash(&self, state: &mut SipState) {
+        self.value.hash(state);
+    }
+}
+
 pub struct FibHeap<K,V> {
+    // A hash table for O(1) access to entries. The value is the key.
+    hash_table: HashMap<V, FibEntry<K,V>>,
     // The minimum element is always contained at the top of the first root.
     roots: DList<FibEntry<K,V>>,
     total: int
 }
 
-impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
+impl<K: fmt::Show, V: Eq + Hash + fmt::Show> fmt::Show for FibHeap<K,V> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}", self.hash_table));
+        for n in self.roots.iter() {
+            try!(write!(f, "{}", n));
+        }
+        try!(write!(f, "***Children End***\n"));
+        write!(f, "{}", self.total)
+    }
+}
+
+impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap<K,V> {
     pub fn new() -> FibHeap<K,V> {
-        FibHeap { roots: DList::new(), total: 0 }
+        FibHeap { hash_table: HashMap::new(), roots: DList::new(), total: 0 }
     }
 
-    // Must return a pointer to the specific entry for O(1) delete_node
-    // and delete_key.
-    pub fn insert(&mut self, k: K, v: V) -> FibEntry<K,V> {
+    pub fn insert(&mut self, k: K, v: V) {
+        let vhash = v.clone();
         let node = FibNode {
             parent: RefCell::new(None),
             children: RefCell::new(DList::new()),
@@ -98,12 +118,12 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             value: v
         };
         let rc_node = Rc::new(node);
-        let ret = rc_node.clone();
+        let hashnode = rc_node.clone();
         let mut new_heap = FibHeap::new();
         new_heap.roots.push(rc_node);
         self.meld(new_heap);
         self.total = self.total + 1;
-        ret
+        self.hash_table.insert(vhash, hashnode);
     }
     pub fn meld<'a>(&'a mut self, other: FibHeap<K,V>) -> &'a mut FibHeap<K,V> {
         if self.roots.is_empty() {
@@ -134,6 +154,8 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
                 // Find the new minimum root
                 self.sort_roots();
                 self.total = self.total - 1;
+                // Remove node from hash table if it is there.
+                self.hash_table.remove(&return_value.clone().val1());
                 return_value
             }
         }
@@ -181,7 +203,8 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
        }
        self.roots.push_front(min_node);
     }
-    pub fn decrease_key(&mut self, node: FibEntry<K,V>, delta: K) {
+    pub fn decrease_key(&mut self, value: V, delta: K) {
+        let node = self.hash_table.get(&value).clone();
         {
             let mut key = node.key.borrow_mut();
             *key.deref_mut() =*key.deref() - delta;
@@ -203,9 +226,10 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Clone> FibHeap<K,V> {
             let mut parent = node.parent.borrow_mut();
             *parent.deref_mut() = None;
         }
-        self.add_root(node);
+        self.add_root(node.clone());
     }
-    pub fn delete(&mut self, node: FibEntry<K,V>) {
+    pub fn delete(&mut self, value: V) {
+        let node = self.hash_table.pop(&value).unwrap();
         if node == *self.roots.front().unwrap() {
             self.delete_min();
         } else {
@@ -300,21 +324,24 @@ mod test {
     #[test]
     fn fheap_insert() {
         let mut fheap: FibHeap<int, int> = FibHeap::new();
-        let one = fheap.insert(1, 1);
-        let two = fheap.insert(2, 2);
+        fheap.insert(1, 1);
+        fheap.insert(2, 2);
+        let one = fheap.hash_table.get(&1).clone();
+        let two = fheap.hash_table.get(&2).clone();
         assert_eq!(*one.key.borrow().deref(), 1);
         assert_eq!(*two.key.borrow().deref(), 2);
         assert_eq!(fheap.find_min(), (1, 1));
-        let zero = fheap.insert(0, 0);
+        fheap.insert(0, 0);
+        let zero = fheap.hash_table.get(&0).clone();
         assert_eq!(*zero.key.borrow().deref(), 0);
         assert_eq!(fheap.find_min(), (0, 0));
     }
     #[test]
     fn fheap_meld() {
         let mut fheap: FibHeap<int, int> = FibHeap::new();
-        let zero = fheap.insert(1, 1);
-        let one = fheap.insert(4, 4);
-        let two = fheap.insert(2, 2);
+        fheap.insert(1, 1);
+        fheap.insert(4, 4);
+        fheap.insert(2, 2);
         let mut fheap1: FibHeap<int, int> = FibHeap::new();
         fheap1.insert(1, 1);
         fheap1.insert(0, 0);
@@ -325,13 +352,13 @@ mod test {
     #[test]
     fn fheap_delete_min() {
         let mut fheap: FibHeap<int, int> = FibHeap::new();
-        let one = fheap.insert(1, 1);
-        let two = fheap.insert(2, 2);
-        let three = fheap.insert(3, 3);
-        let four = fheap.insert(4, 4);
+        fheap.insert(1, 1);
+        fheap.insert(2, 2);
+        fheap.insert(3, 3);
+        fheap.insert(4, 4);
         fheap.insert(5, 5);
         assert_eq!(fheap.find_min(), (1, 1));
-        let zero = fheap.insert(0, 0);
+        fheap.insert(0, 0);
         assert_eq!(fheap.find_min(), (0, 0));
         assert_eq!(fheap.delete_min(), (0, 0));
         assert_eq!(fheap.delete_min(), (1, 1));
@@ -341,30 +368,31 @@ mod test {
     fn test_fheap_decrease_key() {
         let mut fheap: FibHeap<int, int> = FibHeap::new();
         fheap.insert(1, 1);
-        let four = fheap.insert(4, 4);
+        fheap.insert(4, 4);
+        let four = fheap.hash_table.get(&4).clone();
         fheap.insert(0, 0);
-        let five = fheap.insert(5, 5);
+        fheap.insert(5, 5);
         fheap.delete_min();
         assert_eq!(fheap.roots.len(), 2);
-        fheap.decrease_key(four.clone(), 2);
+        fheap.decrease_key(4, 2);
         assert_eq!(*four.key.borrow().deref(), 2);
         assert!(four.parent.borrow().deref().is_none());
         assert_eq!(fheap.roots.len(), 3);
-        fheap.decrease_key(five.clone(), 5);
+        fheap.decrease_key(5, 5);
         assert_eq!(fheap.roots.len(), 3);
         assert_eq!(fheap.find_min(), (0, 5))
     }
     #[test]
     fn test_fheap_delete() {
         let mut fheap: FibHeap<int, int> = FibHeap::new();
-        let one = fheap.insert(1, 1);
+        fheap.insert(1, 1);
         fheap.insert(4, 4);
         fheap.insert(0, 0);
-        let five = fheap.insert(5, 5);
+        fheap.insert(5, 5);
         fheap.delete_min();
-        fheap.delete(five);
+        fheap.delete(5);
         assert_eq!(fheap.roots.len(), 1);
-        fheap.delete(one);
+        fheap.delete(1);
         assert_eq!(fheap.roots.len(), 1);
         assert_eq!(fheap.find_min(), (4, 4))
     }
@@ -377,8 +405,8 @@ mod test {
         fheap.insert(5, 5);
         fheap.insert(2, 2);
         fheap.insert(3, 3);
-        let h6 = fheap.insert(6, 6);
-        let h7 = fheap.insert(7, 7);
+        fheap.insert(6, 6);
+        fheap.insert(7, 7);
         fheap.insert(18, 18);
         fheap.insert(9, 9);
         fheap.insert(11, 11);
@@ -386,9 +414,9 @@ mod test {
         fheap.delete_min();
         assert_eq!(fheap.find_min(), (1, 1));
         assert_eq!(fheap.roots.len(), 3);
-        fheap.decrease_key(h6, 2);
+        fheap.decrease_key(6, 2);
         assert_eq!(fheap.roots.len(), 4);
-        fheap.decrease_key(h7, 3);
+        fheap.decrease_key(7, 3);
         assert_eq!(fheap.roots.len(), 6);
     }
 }
