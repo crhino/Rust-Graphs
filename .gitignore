@@ -1,2 +1,5 @@
 *.swp
 *.rlib
+heaps/fibonacci_heap/Cargo.lock
+heaps/fibonacci_heap/target
+

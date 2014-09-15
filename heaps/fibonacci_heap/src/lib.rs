@@ -3,7 +3,7 @@
  *
  * Fibonacci Heap
  */
-#![crate_name = "fib_heap"]
+#![crate_name = "fibonacci_heap"]
 #![crate_type = "lib"]
 
 extern crate collections;
@@ -204,7 +204,7 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap
        self.roots.push_front(min_node);
     }
     pub fn decrease_key(&mut self, value: V, delta: K) {
-        let node = self.hash_table.get(&value).clone();
+        let node = (*&self.hash_table[value]).clone();
         {
             let mut key = node.key.borrow_mut();
             *key.deref_mut() =*key.deref() - delta;
