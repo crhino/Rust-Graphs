@@ -108,6 +108,10 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap
         FibHeap { hash_table: HashMap::new(), roots: DList::new(), total: 0 }
     }
 
+    pub fn empty(&self) -> bool {
+        self.total == 0
+    }
+
     pub fn insert(&mut self, k: K, v: V) {
         let vhash = v.clone();
         let node = FibNode {
@@ -181,7 +185,7 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap
                 None => break
             }
         }
-        for n in rank_vec.move_iter() {
+        for n in rank_vec.into_iter() {
             if n.is_some() {
                 self.roots.push(n.unwrap());
             }
