@@ -95,15 +95,15 @@ pub struct FibHeap<K,V> {
 impl<K: fmt::Show, V: Eq + Hash + fmt::Show> fmt::Show for FibHeap<K,V> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{}", self.hash_table));
+        try!(write!(f, "\nRoots: "));
         for n in self.roots.iter() {
-            try!(write!(f, "{}", n));
+            try!(write!(f, "\n{}", n));
         }
-        try!(write!(f, "***Children End***\n"));
-        write!(f, "{}", self.total)
+        write!(f, "\ntotal: {}", self.total)
     }
 }
 
-impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap<K,V> {
+impl<K: PartialOrd + Clone + fmt::Show + Sub<K,K>, V: fmt::Show + PartialEq + Eq + Hash + Clone> FibHeap<K,V> {
     pub fn new() -> FibHeap<K,V> {
         FibHeap { hash_table: HashMap::new(), roots: DList::new(), total: 0 }
     }
@@ -223,7 +223,8 @@ impl<K: PartialOrd + Clone + Sub<K,K>, V: PartialEq + Eq + Hash + Clone> FibHeap
                 }
             }
             &None => {
-                self.remove_root(node.clone())
+                self.sort_roots();
+                return
             }
         }
         {
@@ -384,7 +385,19 @@ mod test {
         assert_eq!(fheap.roots.len(), 3);
         fheap.decrease_key(5, 5);
         assert_eq!(fheap.roots.len(), 3);
-        assert_eq!(fheap.find_min(), (0, 5))
+        assert_eq!(fheap.find_min(), (0, 5));
+    }
+    #[test]
+    fn test_fheap_decrease_key_adding_to_empty_root() {
+        let mut fheap: FibHeap<int, int> = FibHeap::new();
+        fheap.insert(4, 4);
+        let four = fheap.hash_table.get(&4).clone();
+        fheap.insert(0, 0);
+        fheap.delete_min();
+        assert_eq!(fheap.roots.len(), 1);
+        fheap.decrease_key(4, 2);
+        assert_eq!(*four.key.borrow().deref(), 2);
+        assert!(four.parent.borrow().deref().is_none());
     }
     #[test]
     fn test_fheap_delete() {
