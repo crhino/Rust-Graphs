@@ -8,7 +8,7 @@ pub trait Graph<V,E> {
     fn neighbors<'a>(&'a self, x: &V) -> Vec<&'a V>;
     fn vertex_edges<'a>(&'a self, x: &V) -> Vec<&'a E>;
     fn add_node<'a>(&mut self, x: V);
-    fn add_edge<'a>(&mut self, x: &V, y: &V);
+    fn add_edge(&mut self, u: &V, v: &V);
     fn remove_edge<'a>(&mut self, x: &V, y: &V);
     fn vertices<'a>(&'a self) -> Vec<&'a V>;
     fn edges<'a>(&'a self) -> Vec<&'a E>;

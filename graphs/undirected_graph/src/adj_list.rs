@@ -45,16 +45,20 @@ impl<V: Hash + Eq, E: Edge<V>> Graph<V,E> for AdjList<V,E> {
         self.vertices.insert(x, Vec::new());
     }
 
-    fn add_edge(&mut self, x: &V, y: &V) {
-
+    fn add_edge(&mut self, u: &V, v: &V) {
+        let edge = Edge::new(u, v);
+        let edge2 = Edge::new(u, v);
+        self.vertices.get_mut(u).push(edge);
+        self.vertices.get_mut(v).push(edge2);
     }
 
     fn remove_edge(&mut self, x: &V, y: &V) {
-
+        self.remove_edge_from_hash(x, y);
+        self.remove_edge_from_hash(y, x);
     }
 
     fn vertices<'a>(&'a self) -> Vec<&'a V> {
-        Vec::new()
+        self.vertices.keys().collect()
     }
 
     fn edges<'a>(&'a self) -> Vec<&'a E> {
@@ -62,3 +66,18 @@ impl<V: Hash + Eq, E: Edge<V>> Graph<V,E> for AdjList<V,E> {
     }
 }
 
+impl<V: Hash + Eq, E: Edge<V>> AdjList<V,E> {
+    fn remove_edge_from_hash(&mut self, x: &V, y: &V) {
+        self.vertices.get_mut(x).retain(|e| {
+            match e.endpoints() {
+                (u, v) => {
+                    if *u != *y && *v != *y {
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        });
+    }
+}
