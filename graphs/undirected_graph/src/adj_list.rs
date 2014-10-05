@@ -62,7 +62,11 @@ impl<V: Hash + Eq, E: Edge<V>> Graph<V,E> for AdjList<V,E> {
     }
 
     fn edges<'a>(&'a self) -> Vec<&'a E> {
-        Vec::new()
+        let edges: Vec<&'a E> = Vec::new();
+        self.vertices.values().fold(edges, |mut init, vec| {
+            init.extend(vec.iter());
+            init
+        })
     }
 }
 
