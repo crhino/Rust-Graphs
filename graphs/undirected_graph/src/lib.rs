@@ -12,6 +12,7 @@ pub trait Graph<V,E> {
     fn remove_edge<'a>(&mut self, x: &V, y: &V);
     fn vertices<'a>(&'a self) -> Vec<&'a V>;
     fn edges<'a>(&'a self) -> Vec<&'a E>;
+    fn new() -> Self;
 }
 
 pub trait Edge<V> {
