@@ -97,6 +97,7 @@ mod test {
     use super::AdjList;
     use super::super::{Graph, Edge};
 
+    #[deriving(PartialEq, Show)]
     struct TestEdge<V> {
         source: V,
         target: V
@@ -143,11 +144,115 @@ mod test {
         graph.add_edge(&1i, &2i);
         graph.add_edge(&1i, &4i);
         let mut neighbors = graph.neighbors(&1i);
+        assert_eq!(neighbors.len(), 3);
+        println!("{}", neighbors);
         neighbors.sort();
         println!("{}", neighbors);
         let expected = vec!(0i, 2i, 4i);
         let mut exp_iter = expected.iter();
         for i in neighbors.iter() {
+            assert_eq!(*i, exp_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_vertex_edges() {
+        let mut graph: AdjList<int, TestEdge<int>> = Graph::new();
+        graph.add_node(0i);
+        graph.add_node(1i);
+        graph.add_node(2i);
+        graph.add_node(3i);
+        graph.add_node(4i);
+        graph.add_edge(&0i, &1i);
+        graph.add_edge(&0i, &3i);
+        graph.add_edge(&2i, &3i);
+        graph.add_edge(&1i, &2i);
+        graph.add_edge(&1i, &4i);
+        let edge0 = Edge::new(&0i, &1i);
+        let edge2 = Edge::new(&1i, &2i);
+        let edge4 = Edge::new(&1i, &4i);
+        let mut edges = graph.vertex_edges(&1i);
+        assert_eq!(edges.len(), 3);
+        println!("{}", edges);
+        let expected = vec!(edge0, edge2, edge4);
+        let mut exp_iter = expected.iter();
+        for i in edges.iter() {
+            assert_eq!(*i, exp_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_remove_edge() {
+        let mut graph: AdjList<int, TestEdge<int>> = Graph::new();
+        graph.add_node(0i);
+        graph.add_node(1i);
+        graph.add_node(2i);
+        graph.add_node(3i);
+        graph.add_node(4i);
+        graph.add_edge(&0i, &1i);
+        graph.add_edge(&0i, &3i);
+        graph.add_edge(&2i, &3i);
+        graph.add_edge(&1i, &2i);
+        graph.add_edge(&1i, &4i);
+        graph.remove_edge(&1i, &2i);
+        let mut neighbors = graph.neighbors(&1i);
+        neighbors.sort();
+        assert_eq!(neighbors.len(), 2);
+        println!("{}", neighbors);
+        println!("{}", neighbors);
+        let expected = vec!(0i, 4i);
+        let mut exp_iter = expected.iter();
+        for i in neighbors.iter() {
+            assert_eq!(*i, exp_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_vertices() {
+        let mut graph: AdjList<int, TestEdge<int>> = Graph::new();
+        graph.add_node(0i);
+        graph.add_node(1i);
+        graph.add_node(2i);
+        graph.add_node(3i);
+        graph.add_node(4i);
+        graph.add_edge(&0i, &1i);
+        graph.add_edge(&0i, &3i);
+        graph.add_edge(&2i, &3i);
+        graph.add_edge(&1i, &2i);
+        graph.add_edge(&1i, &4i);
+        let mut vertices = graph.vertices();
+        assert_eq!(vertices.len(), 5);
+        vertices.sort();
+        println!("{}", vertices);
+        let expected = vec!(0i, 1i, 2i, 3i, 4i);
+        let mut exp_iter = expected.iter();
+        for i in vertices.iter() {
+            assert_eq!(*i, exp_iter.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_edges() {
+        let mut graph: AdjList<int, TestEdge<int>> = Graph::new();
+        graph.add_node(0i);
+        graph.add_node(1i);
+        graph.add_node(2i);
+        graph.add_node(3i);
+        graph.add_node(4i);
+        graph.add_edge(&0i, &1i);
+        graph.add_edge(&2i, &3i);
+        graph.add_edge(&1i, &2i);
+        graph.add_edge(&1i, &4i);
+        let edge0 = Edge::new(&0i, &1i);
+        let edge2 = Edge::new(&1i, &2i);
+        let edge3 = Edge::new(&2i, &3i);
+        let edge4 = Edge::new(&1i, &4i);
+        let mut edges = graph.edges();
+        println!("{}", edges);
+        assert_eq!(edges.len(), 4);
+        let expected = vec!(edge0, edge3, edge2, edge4);
+        let mut exp_iter = expected.iter();
+        for i in edges.iter() {
             assert_eq!(*i, exp_iter.next().unwrap());
         }
     }
